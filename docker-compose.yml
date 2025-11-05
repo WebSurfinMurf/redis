@@ -1,0 +1,92 @@
+version: '3.8'
+
+networks:
+  redis-net:
+    external: true
+  traefik-net:
+    external: true
+  keycloak-net:
+    external: true
+
+volumes:
+  redis-data:
+    external: true
+    name: redis_data
+
+services:
+  redis:
+    image: ${REDIS_IMAGE:-redis:7-alpine}
+    container_name: ${REDIS_CONTAINER:-redis}
+    restart: unless-stopped
+    networks:
+      - redis-net
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    labels:
+      - "hidden=true"
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: redis-commander
+    restart: unless-stopped
+    networks:
+      - redis-net
+    environment:
+      REDIS_HOSTS: local:redis:6379:0:${REDIS_PASSWORD}
+      HTTP_USER: ""
+      HTTP_PASSWORD: ""
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8081"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis-commander-auth-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:latest
+    container_name: redis-commander-auth-proxy
+    restart: unless-stopped
+    networks:
+      - traefik-net
+      - keycloak-net
+      - redis-net
+    env_file:
+      - $HOME/projects/secrets/redis-commander.env
+    command:
+      - --provider=keycloak-oidc
+      - --client-id=redis-commander
+      - --client-secret=${KEYCLOAK_CLIENT_SECRET}
+      - --oidc-issuer-url=https://keycloak.ai-servicers.com/realms/master
+      - --redirect-url=https://redis.ai-servicers.com/oauth2/callback
+      - --upstream=http://redis-commander:8081
+      - --http-address=0.0.0.0:4180
+      - --email-domain=*
+      - --cookie-secret=${OAUTH2_COOKIE_SECRET}
+      - --cookie-secure=true
+      - --pass-access-token=true
+      - --pass-authorization-header=true
+      - --set-authorization-header=true
+      - --set-xauthrequest=true
+      - --skip-provider-button=true
+      - --allowed-group=/administrators
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-net"
+      - "traefik.http.routers.redis.rule=Host(`redis.ai-servicers.com`)"
+      - "traefik.http.routers.redis.entrypoints=websecure"
+      - "traefik.http.routers.redis.tls=true"
+      - "traefik.http.routers.redis.tls.certresolver=letsencrypt"
+      - "traefik.http.services.redis.loadbalancer.server.port=4180"
+    depends_on:
+      - redis-commander
