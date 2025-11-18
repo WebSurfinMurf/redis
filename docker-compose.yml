@@ -8,11 +8,6 @@ networks:
   keycloak-net:
     external: true
 
-volumes:
-  redis-data:
-    external: true
-    name: redis_data
-
 services:
   redis:
     image: ${REDIS_IMAGE:-redis:7-alpine}
@@ -22,9 +17,11 @@ services:
       - redis-net
     ports:
       - "${REDIS_PORT:-6379}:6379"
-    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD}
+    command: redis-server /usr/local/etc/redis/redis.conf
+    env_file:
+      - $HOME/projects/secrets/redis.env
     volumes:
-      - redis-data:/data
+      - /home/administrator/projects/data/redis:/data
       - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]

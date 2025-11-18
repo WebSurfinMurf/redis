@@ -54,12 +54,17 @@ for network in redis-net traefik-net keycloak-net; do
 done
 echo -e "${GREEN}✅ All required networks exist${NC}"
 
-# Check/create volume
-if ! docker volume inspect redis_data &>/dev/null; then
-    echo "Creating redis_data volume..."
-    docker volume create redis_data
+# Check/create data directory
+DATA_DIR="/home/administrator/projects/data/redis"
+if [ ! -d "$DATA_DIR" ]; then
+    echo "Creating Redis data directory..."
+    mkdir -p "$DATA_DIR"
 fi
-echo -e "${GREEN}✅ Redis data volume ready${NC}"
+
+# Ensure correct ownership (Redis runs as UID 999 inside container)
+echo "Setting correct ownership on data directory..."
+docker run --rm -v "$DATA_DIR:/target" alpine chown -R 999:1000 /target
+echo -e "${GREEN}✅ Redis data directory ready${NC}"
 
 # Check redis.conf exists
 if [ ! -f "$SCRIPT_DIR/config/redis.conf" ]; then
@@ -133,8 +138,8 @@ echo "  - redis-net (cache access)"
 echo "  - traefik-net (web routing)"
 echo "  - keycloak-net (authentication)"
 echo ""
-echo "Volumes:"
-echo "  - redis_data (RDB persistence)"
+echo "Data Storage:"
+echo "  - /home/administrator/projects/data/redis (RDB persistence)"
 echo ""
 echo "Access:"
 echo "  - Web UI: https://redis.ai-servicers.com"
