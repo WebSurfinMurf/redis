@@ -15,8 +15,8 @@ set -e
 echo "=== Redis: Forcing synchronous save to disk ==="
 
 # Check if Redis password is in secrets file
-if [ -f /home/administrator/secrets/redis.env ]; then
-    source /home/administrator/secrets/redis.env 2>/dev/null
+if [ -f /home/administrator/projects/secrets/redis.env ]; then
+    source /home/administrator/projects/secrets/redis.env 2>/dev/null
 fi
 
 # Check if password is set
